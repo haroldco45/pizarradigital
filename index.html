@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pizarra Mágica — Dibuja con tu mano</title>
+<meta name="description" content="Pizarra digital con inteligencia artificial: abre tu cámara, levanta el dedo índice y dibuja en el aire. Sin tocar la pantalla.">
+<meta name="theme-color" content="#0b1020">
+
+<!-- Open Graph (9 tags obligatorias) -->
+<meta property="og:title" content="Pizarra Mágica — Dibuja con tu mano">
+<meta property="og:description" content="Abre tu cámara, mueve la mano y dibuja en el aire con IA. Levanta el índice para pintar, dos dedos para mover sin pintar.">
+<meta property="og:image" content="https://pizarra-magica-vibras.netlify.app/og-image.png">
+<meta property="og:url" content="https://pizarra-magica-vibras.netlify.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Vibras Positivas HM">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pizarra Mágica — Dibuja con tu mano">
+<meta name="twitter:image" content="https://pizarra-magica-vibras.netlify.app/og-image.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --tinta-fondo:#0b1020;      /* noche de estudio */
+  --tinta-panel:rgba(11,16,32,.72);
+  --neon-cian:#22e6ff;
+  --neon-magenta:#ff3df2;
+  --neon-lima:#b6ff2e;
+  --neon-ambar:#ffb020;
+  --hueso:#f2f4ff;
+  --borde:rgba(242,244,255,.14);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--tinta-fondo);color:var(--hueso);
+  font-family:'Sora',system-ui,sans-serif}
+
+#escenario{position:fixed;inset:0}
+#video{display:none}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#lienzoVideo{z-index:1}
+#lienzoTrazos{z-index:2}
+#lienzoCursor{z-index:3;pointer-events:none}
+
+/* ---------- Pantalla de inicio ---------- */
+#inicio{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:22px;background:radial-gradient(120% 120% at 50% 0%,#141d3d 0%,var(--tinta-fondo) 60%);
+  text-align:center;padding:28px}
+#inicio h1{font-weight:800;font-size:clamp(2rem,7vw,3.4rem);letter-spacing:-.02em;line-height:1.05}
+#inicio h1 .trazo{background:linear-gradient(90deg,var(--neon-cian),var(--neon-magenta),var(--neon-ambar));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+#inicio p{max-width:420px;opacity:.75;font-size:.95rem;line-height:1.55}
+.gestos{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.gesto{border:1px solid var(--borde);border-radius:14px;padding:12px 16px;background:rgba(255,255,255,.03);
+  font-family:'IBM Plex Mono',monospace;font-size:.78rem;display:flex;flex-direction:column;gap:6px;min-width:120px}
+.gesto b{font-size:1.5rem}
+#btnIniciar{margin-top:8px;border:none;cursor:pointer;font-family:'Sora',sans-serif;font-weight:800;
+  font-size:1.05rem;color:#08101f;padding:16px 38px;border-radius:999px;
+  background:linear-gradient(90deg,var(--neon-cian),var(--neon-lima));
+  box-shadow:0 0 30px rgba(34,230,255,.45);transition:transform .15s}
+#btnIniciar:active{transform:scale(.96)}
+#estadoCarga{font-family:'IBM Plex Mono',monospace;font-size:.75rem;opacity:.6;min-height:1.2em}
+
+/* ---------- HUD superior ---------- */
+#hud{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;
+  align-items:center;padding:10px 14px;pointer-events:none}
+#chipGesto{font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;letter-spacing:.06em;
+  padding:8px 14px;border-radius:999px;background:var(--tinta-panel);border:1px solid var(--borde);
+  backdrop-filter:blur(10px);transition:border-color .2s,color .2s}
+#chipGesto.dibujando{border-color:var(--neon-cian);color:var(--neon-cian)}
+#chipGesto.moviendo{border-color:var(--neon-ambar);color:var(--neon-ambar)}
+#btnCamara{pointer-events:auto;background:var(--tinta-panel);border:1px solid var(--borde);color:var(--hueso);
+  border-radius:999px;padding:8px 14px;font-size:.9rem;cursor:pointer;backdrop-filter:blur(10px)}
+
+/* ---------- Barra de herramientas ---------- */
+#herramientas{position:fixed;bottom:0;left:0;right:0;z-index:10;display:flex;flex-direction:column;gap:10px;
+  padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(11,16,32,.85) 40%)}
+.fila{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+.color{width:34px;height:34px;border-radius:50%;border:2px solid transparent;cursor:pointer;flex:0 0 auto;
+  box-shadow:0 0 0 2px rgba(0,0,0,.4);transition:transform .12s}
+.color.activo{border-color:#fff;transform:scale(1.18);box-shadow:0 0 14px currentColor}
+.boton{background:var(--tinta-panel);border:1px solid var(--borde);color:var(--hueso);border-radius:12px;
+  padding:9px 14px;font-family:'Sora',sans-serif;font-size:.8rem;font-weight:600;cursor:pointer;
+  backdrop-filter:blur(10px);display:flex;align-items:center;gap:6px}
+.boton.activo{border-color:var(--neon-magenta);color:var(--neon-magenta)}
+#grosor{accent-color:var(--neon-cian);width:130px}
+label[for=grosor]{font-family:'IBM Plex Mono',monospace;font-size:.7rem;opacity:.7}
+
+#pie{position:fixed;bottom:2px;left:0;right:0;z-index:9;text-align:center;font-size:.56rem;opacity:.45;
+  font-family:'IBM Plex Mono',monospace;pointer-events:none}
+#aviso{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:20;background:var(--tinta-panel);
+  border:1px solid var(--neon-ambar);color:var(--neon-ambar);padding:8px 16px;border-radius:10px;
+  font-size:.75rem;font-family:'IBM Plex Mono',monospace;display:none;max-width:90%;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- Pantalla de bienvenida -->
+<div id="inicio">
+  <h1>Pizarra <span class="trazo">Mágica</span></h1>
+  <p>Dibuja en el aire con tu mano. La cámara detecta tus dedos con inteligencia artificial — no necesitas tocar la pantalla.</p>
+  <div class="gestos">
+    <div class="gesto"><b>☝️</b><span>Índice arriba<br>= DIBUJAR</span></div>
+    <div class="gesto"><b>✌️</b><span>Dos dedos<br>= MOVER sin pintar</span></div>
+    <div class="gesto"><b>✊</b><span>Puño cerrado<br>= PAUSA</span></div>
+  </div>
+  <button id="btnIniciar">Abrir cámara y dibujar</button>
+  <div id="estadoCarga"></div>
+</div>
+
+<!-- Escenario -->
+<div id="escenario">
+  <video id="video" playsinline></video>
+  <canvas id="lienzoVideo"></canvas>
+  <canvas id="lienzoTrazos"></canvas>
+  <canvas id="lienzoCursor"></canvas>
+</div>
+
+<div id="hud" hidden>
+  <span id="chipGesto">ESPERANDO MANO…</span>
+  <button id="btnCamara" title="Cambiar cámara">🔄</button>
+</div>
+
+<div id="aviso"></div>
+
+<div id="herramientas" hidden>
+  <div class="fila" id="paleta"></div>
+  <div class="fila">
+    <label for="grosor">GROSOR</label>
+    <input type="range" id="grosor" min="2" max="30" value="8">
+    <button class="boton" id="btnBorrador">🧽 Borrador</button>
+    <button class="boton" id="btnLimpiar">🗑️ Limpiar</button>
+    <button class="boton" id="btnGuardar">💾 Guardar</button>
+  </div>
+</div>
+
+<footer id="pie">Desarrollada por Vibras Positivas HM — Derechos de Autor Reservados</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script>
+/* ================== Pizarra Mágica — Vibras Positivas HM ================== */
+const $ = s => document.querySelector(s);
+const video = $('#video');
+const cvVideo = $('#lienzoVideo'), cvTrazos = $('#lienzoTrazos'), cvCursor = $('#lienzoCursor');
+const ctxV = cvVideo.getContext('2d'), ctxT = cvTrazos.getContext('2d'), ctxC = cvCursor.getContext('2d');
+const chip = $('#chipGesto'), aviso = $('#aviso');
+
+const COLORES = ['#22e6ff','#ff3df2','#b6ff2e','#ffb020','#ff4d4d','#ffffff'];
+let colorActual = COLORES[0];
+let grosor = 8;
+let modoBorrador = false;
+let facing = 'user';
+let camara = null, hands = null;
+let prev = null;          // punto anterior suavizado
+let dibujando = false;
+
+/* ---------- Paleta ---------- */
+const paleta = $('#paleta');
+COLORES.forEach((c,i)=>{
+  const b = document.createElement('button');
+  b.className = 'color' + (i===0?' activo':'');
+  b.style.background = c; b.style.color = c;
+  b.setAttribute('aria-label','Color '+c);
+  b.onclick = ()=>{
+    colorActual = c; modoBorrador = false;
+    $('#btnBorrador').classList.remove('activo');
+    document.querySelectorAll('.color').forEach(x=>x.classList.remove('activo'));
+    b.classList.add('activo');
+  };
+  paleta.appendChild(b);
+});
+$('#grosor').oninput = e => grosor = +e.target.value;
+$('#btnBorrador').onclick = e => {
+  modoBorrador = !modoBorrador;
+  e.currentTarget.classList.toggle('activo', modoBorrador);
+};
+$('#btnLimpiar').onclick = ()=> ctxT.clearRect(0,0,cvTrazos.width,cvTrazos.height);
+$('#btnGuardar').onclick = guardarPNG;
+$('#btnCamara').onclick = async ()=>{
+  facing = facing==='user' ? 'environment' : 'user';
+  if(camara){ camara.stop(); }
+  await iniciarCamara();
+};
+
+/* ---------- Tamaño de lienzos ---------- */
+function ajustar(){
+  [cvVideo,cvTrazos,cvCursor].forEach(cv=>{
+    // preservar trazos al redimensionar
+    let img = null;
+    if(cv===cvTrazos && cv.width>0){ img = ctxT.getImageData(0,0,cv.width,cv.height); }
+    cv.width = innerWidth; cv.height = innerHeight;
+    if(img) ctxT.putImageData(img,0,0);
+  });
+}
+addEventListener('resize', ajustar); ajustar();
+
+/* ---------- Detección de dedos ---------- */
+function dedoArriba(lm, tip, pip){ return lm[tip].y < lm[pip].y - 0.02; }
+function clasificarGesto(lm){
+  const indice = dedoArriba(lm,8,6);
+  const medio  = dedoArriba(lm,12,10);
+  const anular = dedoArriba(lm,16,14);
+  const menique= dedoArriba(lm,20,18);
+  if(indice && !medio && !anular && !menique) return 'DIBUJAR';
+  if(indice && medio && !anular && !menique)  return 'MOVER';
+  return 'PAUSA';
+}
+
+/* ---------- Coordenadas (espejo en cámara frontal) ---------- */
+function punto(lm){
+  const x = (facing==='user' ? (1-lm.x) : lm.x) * cvTrazos.width;
+  const y = lm.y * cvTrazos.height;
+  return {x,y};
+}
+
+/* ---------- Resultado de MediaPipe ---------- */
+function onResultados(res){
+  // pintar video de fondo (espejado si es frontal)
+  ctxV.save();
+  if(facing==='user'){ ctxV.translate(cvVideo.width,0); ctxV.scale(-1,1); }
+  ctxV.drawImage(res.image,0,0,cvVideo.width,cvVideo.height);
+  ctxV.restore();
+
+  ctxC.clearRect(0,0,cvCursor.width,cvCursor.height);
+
+  if(res.multiHandLandmarks && res.multiHandLandmarks.length){
+    const lm = res.multiHandLandmarks[0];
+    const gesto = clasificarGesto(lm);
+    const p = punto(lm[8]); // punta del índice
+
+    // suavizado exponencial
+    if(prev){ p.x = prev.x + (p.x-prev.x)*0.45; p.y = prev.y + (p.y-prev.y)*0.45; }
+
+    // cursor con glow
+    ctxC.beginPath();
+    ctxC.arc(p.x,p.y, Math.max(grosor,10)/1.4, 0, Math.PI*2);
+    ctxC.strokeStyle = gesto==='DIBUJAR' ? (modoBorrador?'#ffffff':colorActual) : '#ffb020';
+    ctxC.lineWidth = 3;
+    ctxC.shadowBlur = 18;
+    ctxC.shadowColor = ctxC.strokeStyle;
+    ctxC.stroke();
+
+    if(gesto==='DIBUJAR'){
+      chip.textContent = modoBorrador ? '🧽 BORRANDO' : '✏️ DIBUJANDO';
+      chip.className = 'dibujando';
+      if(dibujando && prev){
+        ctxT.save();
+        ctxT.lineCap='round'; ctxT.lineJoin='round';
+        if(modoBorrador){
+          ctxT.globalCompositeOperation='destination-out';
+          ctxT.lineWidth = grosor*3;
+        }else{
+          ctxT.globalCompositeOperation='source-over';
+          ctxT.strokeStyle = colorActual;
+          ctxT.lineWidth = grosor;
+          ctxT.shadowBlur = 8;
+          ctxT.shadowColor = colorActual;
+        }
+        ctxT.beginPath(); ctxT.moveTo(prev.x,prev.y); ctxT.lineTo(p.x,p.y); ctxT.stroke();
+        ctxT.restore();
+      }
+      dibujando = true;
+    }else{
+      chip.textContent = gesto==='MOVER' ? '✌️ MOVIENDO' : '✊ PAUSA';
+      chip.className = gesto==='MOVER' ? 'moviendo' : '';
+      dibujando = false;
+    }
+    prev = p;
+  }else{
+    chip.textContent = 'ESPERANDO MANO…';
+    chip.className = '';
+    prev = null; dibujando = false;
+  }
+}
+
+/* ---------- Guardar PNG (video + trazos) ---------- */
+function guardarPNG(){
+  const out = document.createElement('canvas');
+  out.width = cvTrazos.width; out.height = cvTrazos.height;
+  const c = out.getContext('2d');
+  c.drawImage(cvVideo,0,0);
+  c.drawImage(cvTrazos,0,0);
+  const a = document.createElement('a');
+  a.download = 'pizarra-magica-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.png';
+  a.href = out.toDataURL('image/png');
+  a.click();
+}
+
+/* ---------- Cámara + MediaPipe ---------- */
+async function iniciarCamara(){
+  camara = new Camera(video, {
+    onFrame: async ()=>{ await hands.send({image: video}); },
+    width: 1280, height: 720, facingMode: facing
+  });
+  await camara.start();
+}
+
+async function iniciar(){
+  const estado = $('#estadoCarga');
+  try{
+    estado.textContent = 'Cargando modelo de IA…';
+    hands = new Hands({locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+    hands.onResults(onResultados);
+
+    estado.textContent = 'Solicitando permiso de cámara…';
+    await iniciarCamara();
+
+    $('#inicio').style.display = 'none';
+    $('#hud').hidden = false;
+    $('#herramientas').hidden = false;
+  }catch(err){
+    estado.textContent = '';
+    aviso.style.display = 'block';
+    aviso.textContent = 'No se pudo acceder a la cámara. Verifica el permiso del navegador y que estés usando HTTPS.';
+    console.error(err);
+  }
+}
+$('#btnIniciar').onclick = iniciar;
+</script>
+</body>
+</html>
