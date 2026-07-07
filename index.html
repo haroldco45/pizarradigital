@@ -38,10 +38,24 @@ html,body{height:100%;overflow:hidden;background:var(--tinta-fondo);color:var(--
 
 #escenario{position:fixed;inset:0}
 #video{display:none}
-canvas{position:absolute;inset:0;width:100%;height:100%}
-#lienzoVideo{z-index:1}
+#lienzoTrazos,#lienzoCursor{position:absolute;inset:0;width:100%;height:100%}
 #lienzoTrazos{z-index:2}
 #lienzoCursor{z-index:3;pointer-events:none}
+
+/* Fondo de pizarra (cuadrícula de puntos sutil) */
+#escenario{background:
+  radial-gradient(circle at 1px 1px, rgba(242,244,255,.08) 1px, transparent 0) 0 0/26px 26px,
+  radial-gradient(120% 120% at 50% 0%, #121a35 0%, var(--tinta-fondo) 65%)}
+
+/* Cámara en miniatura (toca para cambiar de esquina) */
+#lienzoVideo{position:fixed;z-index:8;width:220px;height:124px;border-radius:14px;
+  border:2px solid var(--borde);box-shadow:0 8px 30px rgba(0,0,0,.55);cursor:pointer;
+  transition:top .25s,bottom .25s,left .25s,right .25s}
+#lienzoVideo.tr{top:52px;right:14px;bottom:auto;left:auto}
+#lienzoVideo.br{bottom:130px;right:14px;top:auto;left:auto}
+#lienzoVideo.bl{bottom:130px;left:14px;top:auto;right:auto}
+#lienzoVideo.tl{top:52px;left:14px;bottom:auto;right:auto}
+@media(max-width:640px){#lienzoVideo{width:150px;height:85px}}
 
 /* ---------- Pantalla de inicio ---------- */
 #inicio{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;
@@ -113,7 +127,7 @@ label[for=grosor]{font-family:'IBM Plex Mono',monospace;font-size:.7rem;opacity:
 <!-- Escenario -->
 <div id="escenario">
   <video id="video" playsinline></video>
-  <canvas id="lienzoVideo"></canvas>
+  <canvas id="lienzoVideo" class="tr" title="Toca para mover la cámara de esquina"></canvas>
   <canvas id="lienzoTrazos"></canvas>
   <canvas id="lienzoCursor"></canvas>
 </div>
@@ -187,14 +201,23 @@ $('#btnCamara').onclick = async ()=>{
 
 /* ---------- Tamaño de lienzos ---------- */
 function ajustar(){
-  [cvVideo,cvTrazos,cvCursor].forEach(cv=>{
+  [cvTrazos,cvCursor].forEach(cv=>{
     // preservar trazos al redimensionar
     let img = null;
     if(cv===cvTrazos && cv.width>0){ img = ctxT.getImageData(0,0,cv.width,cv.height); }
     cv.width = innerWidth; cv.height = innerHeight;
     if(img) ctxT.putImageData(img,0,0);
   });
+  cvVideo.width = 640; cvVideo.height = 360; // miniatura 16:9
 }
+
+/* Toca la miniatura para rotarla entre las 4 esquinas */
+const esquinas = ['tr','br','bl','tl']; let esq = 0;
+cvVideo.onclick = ()=>{
+  cvVideo.classList.remove(esquinas[esq]);
+  esq = (esq+1) % 4;
+  cvVideo.classList.add(esquinas[esq]);
+};
 addEventListener('resize', ajustar); ajustar();
 
 /* ---------- Detección de dedos ---------- */
@@ -281,7 +304,8 @@ function guardarPNG(){
   const out = document.createElement('canvas');
   out.width = cvTrazos.width; out.height = cvTrazos.height;
   const c = out.getContext('2d');
-  c.drawImage(cvVideo,0,0);
+  c.fillStyle = '#0b1020';
+  c.fillRect(0,0,out.width,out.height);
   c.drawImage(cvTrazos,0,0);
   const a = document.createElement('a');
   a.download = 'pizarra-magica-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.png';
